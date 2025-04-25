@@ -59,9 +59,8 @@ def load_test_dataset(data_dir: str, batch_size: int, num_workers: int, image_si
 
 
 def create_resnet18_model(num_classes):
-    from torchvision.models import resnet18, ResNet18_Weights
 
-    model = resnet18()
+    model = models.resnet18()
 
     num_features = model.fc.in_features
     model.fc = nn.Linear(num_features, num_classes)
