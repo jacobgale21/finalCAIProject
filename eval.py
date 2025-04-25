@@ -206,11 +206,13 @@ if __name__ == "__main__":
     # Load the trained model from the given checkpoint.
     model = load_trained_model(args.model_path, num_classes, device, args.image_size)
     print("Model loaded successfully from:", args.model_path)
-
+    
+    random_accuracy = 1 / num_classes
+    print("Random Classifier Accuracy: {:.2f}%".format(random_accuracy * 100))
     # Evaluate the model on test data.
     test_loss, test_accuracy = evaluate_model(model, test_loader, device)
     print("Test Loss: {:.4f}, Test Accuracy: {:.2f}%".format(test_loss, test_accuracy * 100))
-
+    
     # Elapsed time.
     et = time.time()
     elapsed = et - st
