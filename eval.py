@@ -228,18 +228,33 @@ if __name__ == "__main__":
     
     # Create a table of per class accuracy with matplotlib
    
+   # Calculate the baseline accuracy for each class
+    class_counts = [0] * num_classes
+    for label in test_loader.dataset.targets:
+        class_counts[label] += 1
+    total_samples = len(test_loader.dataset.targets)
+    baseline_accuracies = [count / total_samples for count in class_counts]
+
     fig, ax = plt.subplots()
     ax.axis('off')  
-    table_data = [[test_loader.dataset.classes[i], f'{per_class_accuracy[i]*100:.2f}%'] for i in range(num_classes)]
-    table_data.append(['Overall', f'{test_accuracy*100:.2f}%'])
-    table = ax.table(cellText=table_data, colLabels=['Class', 'Accuracy'], loc='center')
+
+    # Only per-class rows, no 'Overall'
+    table_data = [
+        [test_loader.dataset.classes[i], f'{per_class_accuracy[i]*100:.2f}%', f'{baseline_accuracies[i]*100:.2f}%']
+        for i in range(num_classes)
+    ]
+
+    table = ax.table(cellText=table_data, colLabels=['Class', 'Accuracy', 'Baseline'], loc='center')
     table.auto_set_font_size(False)
     table.set_fontsize(10)
-# Center the cell text
-    for key, cell in table.get_celld().items():
+
+    # Center all cells
+    for _, cell in table.get_celld().items():
         cell.set_text_props(ha='center')
+
     plt.savefig('per_class_accuracy_table.png', bbox_inches='tight')
     plt.show()
+
    
     # Elapsed time.
     et = time.time()
