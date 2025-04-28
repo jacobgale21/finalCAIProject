@@ -19,6 +19,7 @@ import argparse
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import models, datasets, transforms
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
@@ -78,6 +79,63 @@ def create_resnet18_model(num_classes):
 
     return model
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+def create_cnn(num_classes):
+    class CNN(nn.Module):
+        def __init__(self, num_classes):
+            super(CNN, self).__init__()
+            self.conv1 = nn.Conv2d(3, 32, 3, padding="same")  # Input: 3 channels, Output: 16 filters
+            #self.batch1 = nn.BatchNorm2d(32)
+            self.conv2 = nn.Conv2d(32, 64, 3, padding="same")
+            #self.batch2 = nn.BatchNorm2d(64)
+            self.conv3 = nn.Conv2d(64, 128, 3, padding="same")
+            #self.batch3 = nn.BatchNorm2d(128)
+            self.conv4 = nn.Conv2d(128, 256, 3, padding="same")
+            #self.batch4 = nn.BatchNorm2d(256)
+            self.conv5 = nn.Conv2d(256, 512, 3, padding="same")
+            #self.batch5 = nn.BatchNorm2d(512)
+            #224 -> 112 -> 56 -> 28 -> 14 - >7
+            self.pool = nn.MaxPool2d(2, 2)
+            
+            self.fc1 = nn.Linear(512 * 7 * 7, 128)
+            self.fc2 = nn.Linear(128, num_classes)
+            self.dropout = nn.Dropout(0.3)
+            
+        def forward(self, x):
+            x = self.pool(F.relu(self.conv1(x)))
+            x = self.pool(F.relu(self.conv2(x)))
+            x = self.pool(F.relu(self.conv3(x)))
+            x = self.pool(F.relu(self.conv4(x)))
+            x = self.pool(F.relu(self.conv5(x)))
+            
+            x = x.view(x.size(0), -1) # flatten
+            x = F.relu(self.fc1(x))
+            x = self.dropout(x)
+            x = self.fc2(x)
+            
+            return x
+
+    model = CNN(num_classes=num_classes)
+                          
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0005)
+    model.optimizer = optimizer
+    model.loss_func = nn.CrossEntropyLoss(label_smoothing=0.1)
+
+    return model
+
+
+    model = CNN(num_classes=num_classes)
+                          
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005, weight_decay=0.0005)
+    model.optimizer = optimizer
+    model.loss_func = nn.CrossEntropyLoss(label_smoothing=0.1)
+
+    return model
+
 def load_trained_model(model_path: str, num_classes: int, device: str, image_size: int = 224):
     """
     Builds your model architecture, adjusts the classification head to
@@ -93,7 +151,12 @@ def load_trained_model(model_path: str, num_classes: int, device: str, image_siz
         model: The model loaded on device. (If you are not using pytorch nn.Module directly, it is fine but make sure what it loads is compatible with the rest of the code.)
     """
 
-    model = create_resnet18_model(num_classes=num_classes) # Replace with your model creation function
+    if 'cnn' in model_path.lower():
+        model = create_cnn(num_classes)
+        print("Using custom CNN model architecture.")
+    else:
+        model = create_resnet18_model(num_classes)
+        print("Using ResNet18 model architecture.")
     
     ## Change/rewrite the rest of the function as needed, but make sure what it outputs works with the other functions (e.g., predict)
 
@@ -166,15 +229,15 @@ def evaluate_model(model, test_loader, device):
     return test_loss, test_accuracy, per_class_accuracy
 
 
+
 ######### Main() #########
 
 if __name__ == "__main__":
-    exit_code = 0  # reassign a value for errors
+    exit_code = 0
 
-    # Parse command-line arguments.
     parser = argparse.ArgumentParser(description="Eval script for CAI4104 project")
-    parser.add_argument("--model_path", type=str, required=True,
-                        help="Path to the trained model checkpoint (e.g., models/trained_model.pth)")
+    parser.add_argument("--model_paths", type=str, nargs='+', required=True,
+                        help="Path(s) to the trained model checkpoint(s) (e.g., models/trained_model.pth best_cnn_model.pt)")
     parser.add_argument("--test_data", type=str, default="project_test_data",
                         help="Directory containing the test dataset with class subfolders")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for testing")
@@ -188,49 +251,46 @@ if __name__ == "__main__":
     project_group_id = args.group_id
     project_title = args.project_title
 
-    # Validate required parameters.
     assert project_group_id >= 0, "Group ID must be non-negative"
     assert len(project_title) >= 4, "Project title must be at least 4 characters long"
 
-    # Keep track of time.
     st = time.time()
 
-    # Header.
     print('\n---------- [Eval] (Project: {}, Group: {}) ---------'.format(project_title, project_group_id))
 
-    # Determine the device.
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("Evaluation device:", device)
 
-    # Load test data.
     test_loader = load_test_dataset(args.test_data, args.batch_size, args.num_workers, args.image_size)
     
-    # Grab number of classes from the test dataset. (Should be 12)
     num_classes = len(test_loader.dataset.classes)
     print("Number of classes:", num_classes)
 
-    # Load the trained model from the given checkpoint.
-    model = load_trained_model(args.model_path, num_classes, device, args.image_size)
-    print("Model loaded successfully from:", args.model_path)
-    
-    
-    #Evaluating on random accuracy according to the most occuring class
-    class_counts = [0] * num_classes
-    for label in test_loader.dataset.targets:
-        class_counts[label] += 1
-    most_occurring_class = np.argmax(class_counts)
-    most_occurring_class_accuracy = class_counts[most_occurring_class] / len(test_loader.dataset.targets)
-    print("Most Occurring Class Classifier Accuracy: {:.2f}%".format(most_occurring_class_accuracy * 100))
-    
-    # Evaluate the model on test data.
-    test_loss, test_accuracy, per_class_accuracy  = evaluate_model(model, test_loader, device)
-    print("Test Loss: {:.4f}, Test Accuracy: {:.2f}%".format(test_loss, test_accuracy * 100))
-    
+    # Evaluate each model path
+    for model_path in args.model_paths:
+        print(f"\n=== Evaluating model: {model_path} ===")
+        try:
+            model = load_trained_model(model_path, num_classes, device, args.image_size)
+            print(f"Model loaded successfully from: {model_path}")
+        except Exception as e:
+            print(f"Failed to load model from {model_path}: {e}")
+            continue
 
-   
-    # Elapsed time.
+        # Most Occurring Class Baseline
+        class_counts = [0] * num_classes
+        for label in test_loader.dataset.targets:
+            class_counts[label] += 1
+        most_occurring_class = np.argmax(class_counts)
+        most_occurring_class_accuracy = class_counts[most_occurring_class] / len(test_loader.dataset.targets)
+        print("Most Occurring Class Classifier Accuracy: {:.2f}%".format(most_occurring_class_accuracy * 100))
+
+        # Evaluate model
+        test_loss, test_accuracy, per_class_accuracy  = evaluate_model(model, test_loader, device)
+        print("Test Loss: {:.4f}, Test Accuracy: {:.2f}%".format(test_loss, test_accuracy * 100))
+
     et = time.time()
     elapsed = et - st
-    print('---------- [Eval] Elapsed time -- total: {:.1f} seconds ---------\n'.format(elapsed))
+    print('\n---------- [Eval] Elapsed time -- total: {:.1f} seconds ---------\n'.format(elapsed))
 
     sys.exit(exit_code)
+
